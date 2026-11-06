@@ -1,0 +1,758 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Smart Business City</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Schibsted+Grotesk:wght@600;700&display=swap">
+<style>
+/* Layout: full-height app. Header with live city totals, a rail of building chips, and a 3D stage; the info panel is a side card on desktop and a bottom sheet on phones. */
+:root{
+  --bg:#EDF1F4; --surface:#FFFFFF; --surface2:#E3E9EE; --fg:#132029; --muted:#55646F; --line:#CBD5DC;
+  --accent:#1F6F8B; --good:#1E8A57; --bad:#C4472F; --warn:#C98A1B;
+  --scene-bg:#D6E1E9; --scene-ground:#C5D1DA; --scene-road:#3B4650; --scene-pad:#DDE5EA;
+  --font-display:'Schibsted Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C141A; --surface:#14202A; --surface2:#1B2A36; --fg:#E6EDF2; --muted:#9AABB8; --line:#2A3B48;
+    --accent:#5BB5D5; --good:#4FC68A; --bad:#F0775F; --warn:#E6B04A;
+    --scene-bg:#0A1117; --scene-ground:#121C24; --scene-road:#05090D; --scene-pad:#18242E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C141A; --surface:#14202A; --surface2:#1B2A36; --fg:#E6EDF2; --muted:#9AABB8; --line:#2A3B48;
+  --accent:#5BB5D5; --good:#4FC68A; --bad:#F0775F; --warn:#E6B04A;
+  --scene-bg:#0A1117; --scene-ground:#121C24; --scene-road:#05090D; --scene-pad:#18242E;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:14px;line-height:1.45;overflow:hidden}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{height:100%;display:flex;flex-direction:column;min-height:0}
+.band{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.band{padding-block:12px 8px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px 24px;background:var(--bg)}
+.brand{min-width:0}
+h1{font-family:var(--font-display);font-weight:700;font-size:clamp(20px,4.6vw,26px);line-height:1.1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{margin:2px 0 0;color:var(--muted);font-size:12px}
+.totals{display:flex;gap:18px;flex-wrap:wrap}
+.tot{display:flex;flex-direction:column;min-width:0}
+.tot span{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tot b{font-family:var(--font-mono);font-weight:500;font-size:clamp(15px,3.6vw,18px);font-variant-numeric:tabular-nums}
+.tot b.good{color:var(--good)} .tot b.bad{color:var(--bad)}
+
+nav.band{padding-block:6px 10px;background:var(--bg);border-bottom:1px solid var(--line)}
+.rail{display:flex;gap:8px;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px}
+.chip{flex:none;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;cursor:pointer;font-size:13px;white-space:nowrap}
+.chip i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+.stage{position:relative;flex:1;min-height:0;overflow:hidden;background:var(--scene-bg);touch-action:none}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;outline:none}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.pin{position:absolute;left:0;top:0;pointer-events:auto;border:0;cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:6px;background:var(--surface);color:var(--fg);font-size:11px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.25);white-space:nowrap;will-change:transform}
+.pin i{width:8px;height:8px;border-radius:50%}
+.pin.on{background:var(--fg);color:var(--bg)}
+.tools{position:absolute;top:10px;left:max(12px,env(safe-area-inset-left,0px));display:flex;gap:8px}
+.tbtn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 11px;font-size:12px;cursor:pointer}
+.tbtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.hint{position:absolute;left:max(12px,env(safe-area-inset-left,0px));bottom:12px;max-width:min(320px,70%);font-size:12px;color:var(--fg);background:var(--surface);opacity:.92;border-radius:8px;padding:7px 10px;pointer-events:none;transition:opacity .4s}
+.hint.gone{opacity:0}
+
+.panel{position:absolute;top:12px;right:max(12px,env(safe-area-inset-right,0px));width:380px;max-height:calc(100% - 24px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 8px 28px rgba(0,0,0,.22)}
+.p-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{display:inline-flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.tag i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.x{border:1px solid var(--line);background:var(--surface2);width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;line-height:1}
+.panel h2{font-family:var(--font-display);font-size:22px;line-height:1.15;margin:8px 0 6px;letter-spacing:-.01em;text-wrap:balance}
+.desc{margin:0 0 12px;color:var(--muted);max-width:65ch}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.kpi{background:var(--surface2);border-radius:8px;padding:9px 11px;min-width:0}
+.kpi span{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.kpi b{font-family:var(--font-mono);font-weight:500;font-size:18px;font-variant-numeric:tabular-nums}
+.kpi b.good{color:var(--good)} .kpi b.bad{color:var(--bad)}
+.chartbox{border:1px solid var(--line);border-radius:8px;padding:10px 10px 6px;margin-bottom:12px}
+.chart-h{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 12px;font-size:12px;margin-bottom:4px}
+.legend{display:flex;gap:12px;color:var(--muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.chartbox svg{display:block;width:100%;height:auto}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;margin:0 0 12px;font-size:13px}
+.facts dt{color:var(--muted)} .facts dd{margin:0;font-variant-numeric:tabular-nums;min-width:0}
+.note{border-left:3px solid var(--accent);padding:2px 0 2px 12px;margin-bottom:10px}
+.note b{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.note p{margin:3px 0 0}
+.fine{margin:0;font-size:11px;color:var(--muted)}
+
+@media (max-width:720px){
+  .panel{top:auto;left:0;right:0;bottom:0;width:auto;max-height:56%;border-radius:14px 14px 0 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-left:0;border-right:0;border-bottom:0}
+  .hint{max-width:calc(100% - 24px)}
+}
+@media (prefers-reduced-motion:reduce){.hint{transition:none}}
+</style>
+
+<div class="app">
+  <header class="band">
+    <div class="brand">
+      <h1>Smart Business City</h1>
+      <p class="sub">BBA project · tap any building for its financial dashboard · sample figures</p>
+    </div>
+    <div class="totals" aria-label="City totals, annual">
+      <div class="tot"><span>City revenue</span><b id="tRev">-</b></div>
+      <div class="tot"><span>Expenses</span><b id="tExp">-</b></div>
+      <div class="tot"><span>Net profit</span><b id="tPro" class="good">-</b></div>
+    </div>
+  </header>
+  <nav class="band" aria-label="Buildings"><div class="rail" id="rail"></div></nav>
+  <main class="stage" id="stage">
+    <div id="labels"></div>
+    <div class="tools">
+      <button class="tbtn" id="btnReset" type="button">Reset view</button>
+      <button class="tbtn" id="btnSpin" type="button" aria-pressed="false">Auto-rotate</button>
+    </div>
+    <div class="hint" id="hint">Drag to rotate · scroll or pinch to zoom · tap a building</div>
+    <aside class="panel" id="panel" hidden aria-live="polite"></aside>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+'use strict';
+
+/* ---------- Data (sample figures, USD millions per year) ---------- */
+var MONTHS=['May','Jun','Jul','Aug','Sep','Oct'];
+var DATA=[
+ {id:'hq',name:'Meridian Tower',sector:'Corporate HQ',color:'#1F6F8B',pos:[-12,-12],h:36,rev:48.2,exp:36.1,staff:1240,
+  desc:'Head office of the Meridian holding group. It sets strategy, runs treasury and consolidates the reports of every company in the city.',
+  role:'Holding company',extra:['Subsidiaries','14'],
+  note:'Margin of about 25% is healthy for a holding group. Most expenses are payroll, so profit is sensitive to headcount growth.'},
+ {id:'bank',name:'Civic Bank',sector:'Banking and finance',color:'#2E8B57',pos:[12,-12],h:16,rev:22.7,exp:15.9,staff:410,
+  desc:'The city\'s main bank. It lends to businesses, holds company accounts and finances new startups.',
+  role:'Lender and payments',extra:['Loans issued','$310M'],
+  note:'Revenue comes mostly from interest on loans. Loan defaults are the biggest risk to its profit.'},
+ {id:'mall',name:'Atrium Mall',sector:'Retail',color:'#D9822B',pos:[-12,12],h:11,rev:31.5,exp:26.8,staff:860,
+  desc:'A shopping centre with 120 stores, a food court and cinema. Tenants pay rent plus a share of their sales.',
+  role:'Rent and sales share',extra:['Stores','120'],
+  note:'Retail margins are thin (under 15%). Footfall and tenant occupancy decide whether the year is profitable.'},
+ {id:'hub',name:'Launchpad Hub',sector:'Startups',color:'#7A4FBF',pos:[12,12],h:20,rev:6.4,exp:7.9,staff:260,
+  desc:'An incubator housing 85 early-stage startups. It offers desks, mentors and seed funding.',
+  role:'Incubator',extra:['Startups hosted','85'],
+  rm:[0.55,0.68,0.82,1.0,1.22,1.5],em:[0.96,0.98,1.0,1.0,1.02,1.04],
+  note:'Expenses are higher than revenue, so the hub burns cash. It runs at a loss while its startups grow, so the key metric is revenue growth, not profit.'},
+ {id:'agency',name:'Brandwave Agency',sector:'Marketing and advertising',color:'#D1495B',pos:[-37.5,-12],h:22,rev:9.8,exp:7.2,staff:190,
+  desc:'A marketing agency that plans campaigns for city businesses, from digital ads to billboards and public transport.',
+  role:'Advertising services',extra:['Active campaigns','46'],
+  note:'Agency revenue follows client budgets. Advertising spend usually rises at the end of the year, which lifts the last months.'},
+ {id:'tech',name:'Orbit Tech Park',sector:'IT and software',color:'#4A5FD0',pos:[37.5,-12],h:15,rev:14.9,exp:11.4,staff:520,
+  desc:'Twin office blocks for software companies. They sell subscriptions and development services to the other districts.',
+  role:'Software and services',extra:['Tenant companies','22'],
+  rm:[0.9,0.94,0.98,1.02,1.07,1.12],
+  note:'Subscription revenue is predictable and grows month by month, which makes this the most stable earner in the city.'},
+ {id:'cowork',name:'Nova Coworking',sector:'Offices and coworking',color:'#B08900',pos:[-37.5,12],h:14,rev:5.1,exp:3.9,staff:70,
+  desc:'Flexible offices for freelancers and small teams, rented by the desk or by the month.',
+  role:'Flexible office rental',extra:['Desks','640'],
+  note:'Profit depends on occupancy. Fixed costs such as rent are the same whether desks are full or empty.'},
+ {id:'logistics',name:'Harbor Logistics',sector:'Logistics and warehousing',color:'#5B6770',pos:[37.5,12],h:8,rev:17.3,exp:14.6,staff:380,
+  desc:'Warehouses and a truck fleet that move goods in and out of the city for retailers and manufacturers.',
+  role:'Storage and delivery',extra:['Deliveries / day','1,850'],
+  note:'Fuel and driver wages take most of the revenue. Better route planning is the easiest way to raise its margin.'},
+ {id:'tv',name:'Tashkent TV Tower',sector:'Media and broadcasting',color:'#B5438F',pos:[-37.5,-37.5],h:70,rev:11.4,exp:8.6,staff:640,
+  desc:'The broadcasting tower that carries TV and radio signals across the region. Broadcasters pay for transmission, and advertisers pay for airtime.',
+  role:'Transmission and advertising',extra:['Real tower height','375 m'],
+  rm:[0.92,0.95,0.98,1.0,1.06,1.12],
+  note:'Transmission fees are steady all year. Advertising income rises toward the end of the year, so the last months carry most of the growth.'},
+ {id:'eco',name:'Eco Zone',sector:'Green energy',color:'#6E9B1F',pos:[12,-37.5],h:14,flat:true,rev:8.6,exp:5.2,staff:120,
+  desc:'Solar panels, wind turbines and a battery store that supply clean power to the city\'s offices and malls.',
+  role:'Power sales and carbon credits',extra:['Solar capacity','24 MW'],
+  note:'Running costs are low because sun and wind are free. The big cost was building it, so profit depends on how fast that investment is paid back.'},
+ {id:'parking',name:'Smart Parking',sector:'Parking and mobility',color:'#8A6D3B',pos:[37.5,-37.5],h:11,flat:true,rev:3.2,exp:1.9,staff:35,
+  desc:'A surface lot and three-level car park. Sensors show free spaces in an app, and EV chargers are built into the bays.',
+  role:'Parking fees and EV charging',extra:['Spaces','420'],
+  note:'Income depends on occupancy at peak hours. Dynamic pricing, higher when the lot is nearly full, is the main way to raise revenue.'},
+ {id:'play',name:'Playground',sector:'Public recreation',color:'#1FA7B5',pos:[-37.5,37.5],h:5,flat:true,rev:0.9,exp:0.7,staff:24,
+  desc:'A family play area with a slide, swings, a climbing dome and a sand pit. A cafe kiosk and sponsors cover its running costs.',
+  role:'Sponsorship and kiosk sales',extra:['Visitors / month','18,000'],
+  note:'This is a community space, so a small profit is enough. Sponsorship from nearby businesses keeps it free to enter.'},
+ {id:'stadium',name:'Mini Stadium',sector:'Sports and events',color:'#0C8CE9',pos:[37.5,37.5],h:8,flat:true,rev:2.4,exp:2.0,staff:60,
+  desc:'A small football stadium for local league games and school tournaments. Income comes from tickets, sponsors and pitch rental.',
+  role:'Tickets, sponsors, pitch rental',extra:['Capacity','1,200 seats'],
+  rm:[0.8,0.9,1.15,1.0,1.2,1.0],
+  note:'Match days bring uneven income. Pitch rental and sponsors give a steady base, which keeps the stadium profitable between games.'}
+];
+var HSCALE=1.3;
+var REV_M=[0.88,0.92,0.97,1.0,1.05,1.1], EXP_M=[0.97,0.98,1.0,1.0,1.02,1.03];
+var byId={};
+DATA.forEach(function(b){
+  byId[b.id]=b; if(!b.flat) b.h*=HSCALE; b.profit=b.rev-b.exp; b.margin=b.profit/b.rev*100;
+  b.mRev=MONTHS.map(function(_,i){return b.rev/12*(b.rm||REV_M)[i]});
+  b.mExp=MONTHS.map(function(_,i){return b.exp/12*(b.em||EXP_M)[i]});
+});
+
+function money(v){var s='$'+Math.abs(v).toFixed(1)+'M';return v<0?'−'+s:s}
+var tr=0,te=0; DATA.forEach(function(b){tr+=b.rev;te+=b.exp});
+document.getElementById('tRev').textContent=money(tr);
+document.getElementById('tExp').textContent=money(te);
+var tp=document.getElementById('tPro'); tp.textContent=money(tr-te); tp.className='good';
+
+/* ---------- Scene ---------- */
+var stage=document.getElementById('stage');
+var renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+stage.insertBefore(renderer.domElement,stage.firstChild);
+renderer.domElement.setAttribute('aria-label','3D map of the Smart Business City. Drag to rotate, scroll to zoom.');
+
+var scene=new THREE.Scene();
+var camera=new THREE.PerspectiveCamera(45,1,0.5,500);
+var HOME_POS=new THREE.Vector3(58,50,72), HOME_TGT=new THREE.Vector3(0,3,0);
+camera.position.copy(HOME_POS);
+var controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.target.copy(HOME_TGT);
+controls.enableDamping=true; controls.dampingFactor=0.08;
+controls.minDistance=16; controls.maxDistance=150;
+controls.maxPolarAngle=Math.PI/2-0.05;
+controls.autoRotateSpeed=0.7;
+controls.update();
+
+var hemi=new THREE.HemisphereLight(0xffffff,0x8899aa,0.75); scene.add(hemi);
+var sun=new THREE.DirectionalLight(0xffffff,0.8);
+sun.position.set(50,80,30); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+var sc=sun.shadow.camera; sc.left=-75; sc.right=75; sc.top=75; sc.bottom=-75; sc.near=10; sc.far=220;
+scene.add(sun);
+
+var themed={road:[],pad:[],ground:null};
+
+function mat(color,extra){var m=new THREE.MeshLambertMaterial(Object.assign({color:color},extra||{}));return m}
+
+/* ground and roads */
+var groundMat=mat(0xc5d1da);
+var ground=new THREE.Mesh(new THREE.PlaneGeometry(400,400),groundMat);
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+var ROADS=[-24,0,24];
+var roadMat=mat(0x3b4650); themed.road.push(roadMat);
+var lineMat=new THREE.MeshBasicMaterial({color:0x9aa5ad});
+ROADS.forEach(function(r){
+  var a=new THREE.Mesh(new THREE.BoxGeometry(150,0.1,6),roadMat); a.position.set(0,0.05,r); a.receiveShadow=true; scene.add(a);
+  var b=new THREE.Mesh(new THREE.BoxGeometry(6,0.1,150),roadMat); b.position.set(r,0.06,0); b.receiveShadow=true; scene.add(b);
+  var la=new THREE.Mesh(new THREE.PlaneGeometry(150,0.2),lineMat); la.rotation.x=-Math.PI/2; la.position.set(0,0.13,r); scene.add(la);
+  var lb=new THREE.Mesh(new THREE.PlaneGeometry(0.2,150),lineMat); lb.rotation.x=-Math.PI/2; lb.position.set(r,0.14,0); scene.add(lb);
+});
+
+/* facade textures */
+var texCache={};
+function facade(base,win){
+  var k=base+win; if(texCache[k]) return texCache[k];
+  var c=document.createElement('canvas'); c.width=c.height=64;
+  var g=c.getContext('2d'); g.fillStyle=base; g.fillRect(0,0,64,64);
+  g.fillStyle=win; g.fillRect(9,13,46,36);
+  g.fillStyle='rgba(255,255,255,0.18)'; g.fillRect(9,13,46,6);
+  var t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=4;
+  texCache[k]=t; return t;
+}
+function side(base,win,a,h){
+  var t=facade(base,win).clone(); t.needsUpdate=true;
+  t.repeat.set(Math.max(1,Math.round(a/3)),Math.max(1,Math.round(h/3.2)));
+  return new THREE.MeshLambertMaterial({map:t});
+}
+function box(w,h,d,o){
+  var roof=new THREE.MeshLambertMaterial({color:o.roof||0x8d98a1});
+  var mats=[side(o.base,o.win,d,h),side(o.base,o.win,d,h),roof,roof,side(o.base,o.win,w,h),side(o.base,o.win,w,h)];
+  var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mats);
+  m.position.set(o.x||0,(o.y||0)+h/2,o.z||0); m.castShadow=true; m.receiveShadow=true; return m;
+}
+function plain(w,h,d,color,x,y,z,extra){
+  var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color,extra));
+  m.position.set(x,y+h/2,z); m.castShadow=true; m.receiveShadow=true; return m;
+}
+function sign(text,bg,fg,w,h){
+  var c=document.createElement('canvas'); c.width=512; c.height=Math.round(512*h/w);
+  var g=c.getContext('2d'); g.fillStyle=bg; g.fillRect(0,0,c.width,c.height);
+  g.fillStyle=fg; g.font='bold '+Math.round(c.height*0.5)+'px sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+  g.fillText(text,c.width/2,c.height/2+2);
+  var t=new THREE.CanvasTexture(c);
+  return new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:t,side:THREE.DoubleSide}));
+}
+function tree(x,z,s){
+  var g=new THREE.Group();
+  var tr=new THREE.Mesh(new THREE.CylinderGeometry(0.25*s,0.3*s,1.3*s,6),mat(0x6b4a2f)); tr.position.y=0.65*s; tr.castShadow=true;
+  var cr=new THREE.Mesh(new THREE.ConeGeometry(1.3*s,3.4*s,8),mat(0x3f8a4f)); cr.position.y=2.7*s; cr.castShadow=true;
+  g.add(tr,cr); g.position.set(x,0.3,z); return g;
+}
+
+/* seeded random for filler buildings */
+var seed=7; function rnd(){seed=(seed*16807)%2147483647;return (seed-1)/2147483646}
+function rr(a,b){return a+rnd()*(b-a)}
+
+/* landmark builders: each returns a Group centred on its block */
+var rotors=[];
+var BUILD={
+ hq:function(g,b){
+  g.add(box(12,34,12,{base:'#27465a',win:'#8fc2dd',roof:0x1c2f3c}));
+  g.add(box(8,4,8,{base:'#27465a',win:'#8fc2dd',roof:0x1c2f3c,y:34}));
+  g.add(plain(12.6,1,12.6,0x1F6F8B,0,33,0));
+  g.add(plain(0.35,9,0.35,0xcfd8de,0,38,0));
+  var s=sign('MERIDIAN','#1c2f3c','#ffffff',9,1.6); s.position.set(0,5.5,6.05); g.add(s);
+ },
+ bank:function(g,b){
+  g.add(box(16,13,11,{base:'#d8d2c4',win:'#6b7f8c',roof:0xb9b2a2}));
+  g.add(plain(17,1,13,0x2E8B57,0,13,0.5));
+  for(var i=0;i<6;i++){
+    var c=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,10,12),mat(0xeee9dd));
+    c.position.set(-6+i*2.4,5,6.4); c.castShadow=true; g.add(c);
+  }
+  g.add(plain(15,0.6,3,0xcfc8b8,0,10,6.4));
+  var s=sign('CIVIC BANK','#2E8B57','#ffffff',8,1.5); s.position.set(0,11.5,6.1); g.add(s);
+ },
+ mall:function(g,b){
+  g.add(box(18,8,13,{base:'#e9d9c4',win:'#d9822b',roof:0xb8a68e}));
+  var atr=plain(8,11,6,0x5fb7c9,0,0,5,{transparent:true,opacity:0.75}); g.add(atr);
+  g.add(plain(8.6,0.5,6.6,0xd9822b,0,11,5));
+  var s=sign('ATRIUM MALL','#d9822b','#ffffff',12,1.8); s.position.set(0,8.6,-6.55); s.rotation.y=Math.PI; g.add(s);
+  var s2=sign('ATRIUM','#d9822b','#ffffff',6,1.4); s2.position.set(0,12.3,5); g.add(s2);
+  for(var i=0;i<4;i++) g.add(plain(1.6,0.8,0.9,[0xe5484d,0x3e63dd,0xf5a524,0xffffff][i],-6+i*4,0,-8.2));
+ },
+ hub:function(g,b){
+  g.add(box(13,7,13,{base:'#efeaf7',win:'#7a4fbf',roof:0x9a86c4}));
+  g.add(box(9.5,7,9.5,{base:'#efeaf7',win:'#7a4fbf',roof:0x9a86c4,y:7}));
+  g.add(box(6,6,6,{base:'#efeaf7',win:'#7a4fbf',roof:0x9a86c4,y:14}));
+  var body=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.9,3.4,12),mat(0xf2f2f6)); body.position.y=21.7; body.castShadow=true; g.add(body);
+  var nose=new THREE.Mesh(new THREE.ConeGeometry(0.7,1.6,12),mat(0x7a4fbf)); nose.position.y=24.2; g.add(nose);
+  var s=sign('LAUNCHPAD','#7a4fbf','#ffffff',9,1.5); s.position.set(0,3,6.55); g.add(s);
+ },
+ agency:function(g,b){
+  g.add(box(12,15,10,{base:'#f4d7dc',win:'#d1495b',roof:0xc79aa2}));
+  g.add(plain(0.5,5,0.5,0x55606a,-4.5,15,0)); g.add(plain(0.5,5,0.5,0x55606a,4.5,15,0));
+  var bb=sign('BRANDWAVE','#d1495b','#ffffff',12,4.2); bb.position.set(0,19,0.1); g.add(bb);
+  var bb2=bb.clone(); bb2.rotation.y=Math.PI; bb2.position.set(0,19,-0.1); g.add(bb2);
+  var s=sign('AGENCY','#ffffff','#d1495b',6,1.4); s.position.set(0,4,5.05); g.add(s);
+ },
+ tech:function(g,b){
+  g.add(box(10,13,9,{base:'#dfe6f7',win:'#4a5fd0',roof:0x8a96c8,x:-5.5,z:-1}));
+  g.add(box(9,9,9,{base:'#dfe6f7',win:'#4a5fd0',roof:0x8a96c8,x:5.5,z:-1}));
+  g.add(plain(3,1.2,2.4,0xbfc9e6,0,6,-1));
+  for(var i=0;i<3;i++){
+    var p=plain(2.6,0.15,1.6,0x1d2f6b,-8+i*3,13.1,-1); p.rotation.x=-0.3; g.add(p);
+  }
+  var s=sign('ORBIT TECH','#4a5fd0','#ffffff',8,1.4); s.position.set(5.5,3,3.55); g.add(s);
+ },
+ cowork:function(g,b){
+  g.add(box(12,10,10,{base:'#efe6c8',win:'#b08900',roof:0xc9bd90}));
+  g.add(plain(8,0.6,7,0x4f9a5c,0,10,0));
+  g.add(tree(-2,0,0.5)); g.children[g.children.length-1].position.y=10.6;
+  g.add(tree(2,1,0.5)); g.children[g.children.length-1].position.y=10.6;
+  var s=sign('NOVA COWORKING','#b08900','#ffffff',9,1.4); s.position.set(0,3.2,5.05); g.add(s);
+ },
+ logistics:function(g,b){
+  g.add(box(17,7,12,{base:'#c6ccd1',win:'#aab3ba',roof:0x8f99a2,x:-1.5,z:-2}));
+  for(var i=0;i<4;i++) g.add(plain(2.6,3.4,0.2,0x3a444d,-7+i*3.8,0,4.05));
+  var cols=[0xe5484d,0x3e63dd,0xf5a524,0x30a46c,0xe5484d,0x3e63dd];
+  for(var j=0;j<6;j++){
+    g.add(plain(3.4,1.5,1.5,cols[j],5.5+(j%2)*0.3,(j>3?1.5:0),-6+Math.floor(j/2)*2.4));
+  }
+  g.add(plain(5,2.4,2.2,0xffffff,-5,0.2,7)); g.add(plain(2,1.8,2.2,0x5b6770,-1.8,0.2,7));
+  var s=sign('HARBOR LOGISTICS','#5b6770','#ffffff',10,1.4); s.position.set(-1.5,8.2,4.05); g.add(s);
+ }
+};
+
+function cyl(rt,rb,h,color,x,y,z,seg){
+  var m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg||14),mat(color));
+  m.position.set(x,y+h/2,z); m.castShadow=true; m.receiveShadow=true; return m;
+}
+BUILD.tv=function(g,b){
+  var cm=0xcfd3d6;
+  g.add(plain(11,1.2,11,0xb9bfc4,0,0,0));
+  g.add(cyl(1.7,2.7,6,cm,0,1.2,0,10));
+  g.add(cyl(1.0,1.7,28,cm,0,7.2,0,10));
+  g.add(cyl(4.6,3,2.8,0xa7aeb4,0,35,0,16));
+  g.add(cyl(4.8,4.6,0.8,b.color,0,37.8,0,16));
+  g.add(cyl(3,4.8,2,0xa7aeb4,0,38.6,0,16));
+  g.add(cyl(0.7,1.0,12,cm,0,40.6,0,10));
+  for(var i=0;i<5;i++) g.add(cyl(0.45,0.45,3,i%2?0xffffff:0xd62828,0,52.6+i*3,0,8));
+  var tip=new THREE.Mesh(new THREE.ConeGeometry(0.3,2,8),mat(0xd62828)); tip.position.y=68.6; g.add(tip);
+  for(var t=0;t<6;t++){var a=t/6*Math.PI*2; var tr=tree(Math.cos(a)*7,Math.sin(a)*7,0.9); tr.position.y=0; g.add(tr)}
+  var s=sign('TV TOWER','#b5438f','#ffffff',7,1); s.position.set(0,0.7,5.55); g.add(s);
+};
+BUILD.eco=function(g,b){
+  g.add(plain(16.6,0.15,16.6,0x77b96a,0,0,0));
+  for(var r=0;r<3;r++) for(var c=0;c<5;c++){
+    var p=plain(2.6,0.15,1.8,0x1d3a6b,-6.2+c*3.1,0.9,-6.4+r*2.5); p.rotation.x=-0.5; g.add(p);
+    g.add(plain(0.15,0.8,0.15,0x8a949c,-6.2+c*3.1,0.15,-6.4+r*2.5));
+  }
+  [[5,-1.5],[5,4]].forEach(function(q){
+    g.add(cyl(0.25,0.5,12,0xf2f5f7,q[0],0.15,q[1],10));
+    g.add(plain(0.8,0.8,1.6,0xf2f5f7,q[0],12.0,q[1]));
+    var rotor=new THREE.Group(); rotor.position.set(q[0],12.4,q[1]+1.0);
+    var hub=new THREE.Mesh(new THREE.SphereGeometry(0.4,10,8),mat(0xdfe5e8)); rotor.add(hub);
+    for(var k=0;k<3;k++){
+      var pivot=new THREE.Group(); pivot.rotation.z=k*Math.PI*2/3;
+      var bl=new THREE.Mesh(new THREE.BoxGeometry(0.3,4.6,0.1),mat(0xffffff)); bl.position.y=2.4; bl.castShadow=true; pivot.add(bl); rotor.add(pivot);
+    }
+    rotors.push(rotor); g.add(rotor);
+  });
+  g.add(plain(5,3,3,0xf1f5f2,-5.5,0.15,6.5));
+  g.add(plain(5.4,0.3,3.4,0x3f9e4d,-5.5,3.15,6.5));
+  var s=sign('ECO ZONE','#3f9e4d','#ffffff',4,0.9); s.position.set(-5.5,1.7,8.05); g.add(s);
+  [[1,7],[3,7.5],[7.5,7.5],[-7.5,-7.5],[7.5,-7.5]].forEach(function(p){var t=tree(p[0],p[1],0.9);t.position.y=0.15;g.add(t)});
+};
+BUILD.parking=function(g,b){
+  var cols=[0xe5484d,0xf5a524,0x3e63dd,0xffffff,0x30a46c,0x8e4ec6,0x2b2f33];
+  g.add(plain(17,0.1,17,0x4a5258,0,0,0));
+  for(var i=0;i<9;i++) g.add(plain(0.1,0.03,5,0xf2f2f2,-8+i*2,0.1,-5));
+  for(var j=0;j<8;j++){ if(rnd()<0.72) g.add(plain(1.2,0.7,2.4,cols[Math.floor(rnd()*cols.length)],-7+j*2,0.1,-5)); }
+  for(var e=0;e<4;e++){ g.add(plain(0.4,1.3,0.4,0x30a46c,-6+e*4,0.1,-7.9)); }
+  for(var l=0;l<3;l++){
+    var y=l*3.2+0.1;
+    g.add(plain(16,0.5,7,0x9aa3a9,0,y+2.7,4.7));
+    [[-7.6,1.5],[7.6,1.5],[-7.6,7.9],[7.6,7.9]].forEach(function(p){g.add(plain(0.6,2.7,0.6,0x7a838a,p[0],y,p[1]))});
+    for(var k=0;k<4;k++){ if(rnd()<0.7) g.add(plain(2.4,0.7,1.2,cols[Math.floor(rnd()*cols.length)],-5.5+k*3.6,y+3.2,4.7)); }
+  }
+  var s=sign('SMART PARKING','#2f80ed','#ffffff',8,1.5); s.position.set(0,10.8,1.0); g.add(s);
+  g.add(plain(0.2,1.6,0.2,0x55606a,-3.9,9.4,1.0)); g.add(plain(0.2,1.6,0.2,0x55606a,3.9,9.4,1.0));
+};
+BUILD.play=function(g,b){
+  g.add(plain(16.6,0.15,16.6,0x5aa7a0,0,0,0));
+  g.add(plain(8,0.17,8,0xe3b341,-4,0,-4));
+  g.add(plain(8,0.17,8,0xd9665c,4,0,4));
+  g.add(plain(2.2,3.4,2.2,0xf2b134,-4.5,0.15,-5.2));
+  g.add(plain(2.8,0.25,2.8,0xd9665c,-4.5,3.55,-5.2));
+  var sl=plain(1.2,0.15,5.7,0xd9665c,-4.5,0,-2.9); sl.rotation.x=0.62; sl.position.y=2.0; g.add(sl);
+  g.add(plain(0.2,3.6,0.2,0x55606a,2.8,0.15,-5)); g.add(plain(0.2,3.6,0.2,0x55606a,7.2,0.15,-5));
+  g.add(plain(4.6,0.2,0.2,0x55606a,5,3.75,-5));
+  [4.3,5.7].forEach(function(x){
+    g.add(plain(0.8,0.1,0.35,0xe5484d,x,1.15,-5));
+    g.add(plain(0.04,2.6,0.04,0xdddddd,x-0.35,1.25,-5)); g.add(plain(0.04,2.6,0.04,0xdddddd,x+0.35,1.25,-5));
+  });
+  var dome=new THREE.Mesh(new THREE.SphereGeometry(2.6,12,8,0,Math.PI*2,0,Math.PI/2),new THREE.MeshBasicMaterial({color:0x2f80ed,wireframe:true,side:THREE.DoubleSide}));
+  dome.position.set(-4.5,0.15,4.5); g.add(dome);
+  g.add(cyl(1.6,1.6,0.3,0xf2b134,0,0.3,1,20));
+  g.add(plain(0.2,1.2,0.2,0x55606a,0,0.6,1));
+  g.add(plain(0.5,0.9,0.6,0x55606a,4.5,0.15,2.5));
+  var ss=plain(5,0.2,0.5,0xf2b134,4.5,0,2.5); ss.rotation.z=0.15; ss.position.y=1.1; g.add(ss);
+  g.add(plain(4,0.3,4,0xe8d6a0,2.5,0.15,6.4));
+  [[7,7],[-7.5,-0.5],[0.5,-7.5]].forEach(function(p){var t=tree(p[0],p[1],0.9);t.position.y=0.15;g.add(t)});
+  var s=sign('PLAYGROUND','#1fa7b5','#ffffff',7,1.2); s.position.set(0,4.4,8.4); g.add(s);
+  g.add(plain(0.2,3.8,0.2,0x55606a,-3.4,0.15,8.4)); g.add(plain(0.2,3.8,0.2,0x55606a,3.4,0.15,8.4));
+};
+
+BUILD.stadium=function(g,b){
+  var white=0xf4f6f4;
+  g.add(plain(17,0.1,17,0xc9d1d6,0,0,0));
+  for(var s=0;s<6;s++) g.add(plain(8,0.1,13/6,s%2?0x3f9a4a:0x4aa856,0,0.1,-5.4+s*13/6));
+  function line(w,d,x,z){g.add(plain(w,0.02,d,white,x,0.2,z))}
+  function rect(cx,cz,w,d){line(w,0.12,cx,cz-d/2);line(w,0.12,cx,cz+d/2);line(0.12,d,cx-w/2,cz);line(0.12,d,cx+w/2,cz)}
+  rect(0,0,8,13); line(8,0.12,0,0); rect(0,-5,4.4,3); rect(0,5,4.4,3);
+  var ring=new THREE.Mesh(new THREE.RingGeometry(1.05,1.17,32),new THREE.MeshBasicMaterial({color:white,side:THREE.DoubleSide}));
+  ring.rotation.x=-Math.PI/2; ring.position.y=0.23; g.add(ring);
+  var ball=new THREE.Mesh(new THREE.SphereGeometry(0.22,10,8),new THREE.MeshLambertMaterial({color:0xffffff})); ball.position.y=0.4; g.add(ball);
+  [-1,1].forEach(function(sz){ g.add(plain(1.9,0.8,0.5,white,0,0.1,sz*6.8,{transparent:true,opacity:0.55})) });
+  var seat=[0x0c8ce9,0x0a6fba,0x0c8ce9];
+  [-1,1].forEach(function(sx){
+    for(var t=0;t<3;t++) g.add(plain(1.0,0.8+t*0.8,12,seat[t],sx*(4.7+t*1.0),0.1,0));
+  });
+  [-1,1].forEach(function(sz){
+    for(var t=0;t<2;t++) g.add(plain(9.4,0.8+t*0.8,0.9,seat[t],0,0.1,sz*(7.3+t*0.9)));
+  });
+  g.add(plain(3.2,0.2,12.5,0xe8eaed,6.0,3.7,0));
+  [-5.5,0,5.5].forEach(function(z){ g.add(plain(0.2,3.5,0.2,0x7a838a,7.2,0.1,z)) });
+  [[-7.6,-8],[7.6,-8],[-7.6,8],[7.6,8]].forEach(function(p){
+    g.add(cyl(0.12,0.18,8,0x8a949c,p[0],0.1,p[1],8));
+    var head=new THREE.Mesh(new THREE.BoxGeometry(1.4,0.7,0.3),new THREE.MeshBasicMaterial({color:0xfff3b0}));
+    head.position.set(p[0],8.4,p[1]); g.add(head);
+  });
+  var sg=sign('MINI STADIUM','#0c8ce9','#ffffff',6,0.9); sg.position.set(0,1.6,8.8); g.add(sg);
+};
+
+/* blocks */
+var CENTERS=[-37.5,-12,12,37.5];
+var landmarkAt={};
+DATA.forEach(function(b){landmarkAt[b.pos[0]+','+b.pos[1]]=b});
+var groups={}, pickables=[], outlines={};
+var fillerBases=['#9fb0bd','#b7c0c7','#8d9ea9','#a9b4a9','#c1b9ae'];
+
+function padMesh(color,tint){
+  var m=new THREE.Mesh(new THREE.BoxGeometry(18,0.3,18),tint?mat(color,{transparent:true,opacity:0.55}):mat(color));
+  m.position.y=0.15; m.receiveShadow=true; return m;
+}
+function outline(color){
+  var g=new THREE.Group(), m=new THREE.MeshBasicMaterial({color:color}), h=9.4;
+  [[0,-h,19,0.5],[0,h,19,0.5],[-h,0,0.5,19],[h,0,0.5,19]].forEach(function(s){
+    var e=new THREE.Mesh(new THREE.BoxGeometry(s[2],0.5,s[3]),m); e.position.set(s[0],0.45,s[1]); g.add(e);
+  });
+  g.visible=false; return g;
+}
+
+CENTERS.forEach(function(cx,i){
+  CENTERS.forEach(function(cz,j){
+    var key=cx+','+cz, lm=landmarkAt[key];
+    var g=new THREE.Group(); g.position.set(cx,0,cz); scene.add(g);
+    if(lm){
+      var pad=padMesh(lm.color,true); g.add(pad);
+      var inner=new THREE.Group(); inner.position.y=0.3; g.add(inner);
+      BUILD[lm.id](inner,lm);
+      if(!lm.flat){
+        inner.scale.y=HSCALE;
+        inner.traverse(function(o){ if(o.geometry&&o.geometry.type==='PlaneGeometry') o.scale.y=1/HSCALE; });
+      }
+      inner.traverse(function(o){ if(o.isMesh){o.userData.id=lm.id;pickables.push(o)} });
+      pad.userData.id=lm.id; pickables.push(pad);
+      var ol=outline(lm.color); g.add(ol); outlines[lm.id]=ol;
+      groups[lm.id]=inner;
+      return;
+    }
+    var padM=new THREE.Mesh(new THREE.BoxGeometry(18,0.3,18),mat(0xdde5ea)); padM.position.y=0.15; padM.receiveShadow=true;
+    themed.pad.push(padM.material); g.add(padM);
+    if(i===1&&j===0){ /* park */
+      var lawn=new THREE.Mesh(new THREE.BoxGeometry(16,0.2,16),mat(0x6fae6a)); lawn.position.y=0.4; lawn.receiveShadow=true; g.add(lawn);
+      var pond=new THREE.Mesh(new THREE.CylinderGeometry(3.2,3.2,0.25,28),mat(0x5aa7c9)); pond.position.set(2,0.5,2); g.add(pond);
+      for(var t=0;t<16;t++){ var a=t/16*Math.PI*2; var tr=tree(Math.cos(a)*6.5+rr(-1,1),Math.sin(a)*6.5+rr(-1,1),rr(0.8,1.2)); tr.position.y=0.5; g.add(tr); }
+      return;
+    }
+    if(i===2&&j===3){ /* plaza */
+      var pl=new THREE.Mesh(new THREE.BoxGeometry(14,0.15,14),mat(0xcfd6db)); pl.position.y=0.38; g.add(pl);
+      var bas=new THREE.Mesh(new THREE.CylinderGeometry(3,3,0.7,28),mat(0xbfc7cc)); bas.position.y=0.8; g.add(bas);
+      var wat=new THREE.Mesh(new THREE.CylinderGeometry(2.6,2.6,0.2,28),mat(0x5aa7c9)); wat.position.y=1.2; g.add(wat);
+      var jet=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.3,2.4,8),mat(0xdbe9f0)); jet.position.y=2.2; g.add(jet);
+      [[-6,-6],[6,-6],[-6,6],[6,6]].forEach(function(p){var t=tree(p[0],p[1],0.9);t.position.y=0.4;g.add(t)});
+      return;
+    }
+    [[-4.4,-4.4],[4.4,-4.4],[-4.4,4.4],[4.4,4.4]].forEach(function(q){
+      var w=rr(5,7), d=rr(5,7), h=rr(8,21);
+      var base=fillerBases[Math.floor(rnd()*fillerBases.length)];
+      g.add(box(w,h,d,{base:base,win:'#dfe7ec',roof:0x8a949c,x:q[0]+rr(-0.7,0.7),y:0.3,z:q[1]+rr(-0.7,0.7)}));
+    });
+  });
+});
+for(var ti=0;ti<12;ti++){ /* street trees */
+  var along=-45+ti*8.2;
+  [-24,0,24].forEach(function(r){
+    if(Math.abs(along-r)<5) return;
+    var t1=tree(along,r+3.8,0.7); scene.add(t1);
+  });
+}
+
+/* traffic */
+var cars=[], carColors=[0xe5484d,0xf5a524,0x3e63dd,0xffffff,0x30a46c,0x8e4ec6];
+for(var ci=0;ci<18;ci++){
+  var axis=ci%2===0?'x':'z', road=ROADS[ci%3], dir=(Math.floor(ci/3)%2===0)?1:-1;
+  var lane=road+(dir>0?1.4:-1.4);
+  var car=new THREE.Mesh(new THREE.BoxGeometry(2,0.8,1.1),mat(carColors[ci%carColors.length]));
+  car.castShadow=false;
+  var pos=-60+rnd()*120;
+  if(axis==='x'){car.position.set(pos,0.5,lane)} else {car.position.set(lane,0.5,pos);car.rotation.y=Math.PI/2}
+  scene.add(car); cars.push({m:car,axis:axis,dir:dir,speed:rr(5,9)});
+}
+
+/* ---------- Theme ---------- */
+function isDark(){
+  var t=document.documentElement.getAttribute('data-theme');
+  if(t) return t==='dark';
+  return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function cssColor(name){return new THREE.Color(getComputedStyle(document.documentElement).getPropertyValue(name).trim())}
+function applyTheme(){
+  var bg=cssColor('--scene-bg');
+  scene.background=bg;
+  scene.fog=new THREE.Fog(bg,110,260);
+  groundMat.color.copy(cssColor('--scene-ground'));
+  roadMat.color.copy(cssColor('--scene-road'));
+  var pc=cssColor('--scene-pad'); themed.pad.forEach(function(m){m.color.copy(pc)});
+  var d=isDark();
+  hemi.intensity=d?0.42:0.75; sun.intensity=d?0.45:0.8;
+  hemi.color.set(d?0x6b7f94:0xffffff);
+}
+applyTheme();
+if(window.matchMedia){
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  if(mq.addEventListener) mq.addEventListener('change',applyTheme);
+}
+new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- Labels and chips ---------- */
+var labelsEl=document.getElementById('labels'), rail=document.getElementById('rail');
+var pins={}, chips={};
+DATA.forEach(function(b){
+  var p=document.createElement('button'); p.type='button'; p.className='pin'; p.setAttribute('data-id',b.id);
+  p.innerHTML='<i style="background:'+b.color+'"></i>'+b.name;
+  p.addEventListener('click',function(){select(b.id)});
+  labelsEl.appendChild(p); pins[b.id]=p;
+  var c=document.createElement('button'); c.type='button'; c.className='chip'; c.setAttribute('aria-pressed','false');
+  c.innerHTML='<i style="background:'+b.color+'"></i>'+b.name;
+  c.addEventListener('click',function(){select(b.id)});
+  rail.appendChild(c); chips[b.id]=c;
+});
+var tmpV=new THREE.Vector3();
+function updateLabels(){
+  var w=stage.clientWidth,h=stage.clientHeight;
+  DATA.forEach(function(b){
+    tmpV.set(b.pos[0],b.h+5,b.pos[1]).project(camera);
+    var p=pins[b.id];
+    if(tmpV.z>1||tmpV.z<-1){p.style.display='none';return}
+    p.style.display='';
+    var x=(tmpV.x*0.5+0.5)*w, y=(-tmpV.y*0.5+0.5)*h;
+    p.style.transform='translate('+x.toFixed(1)+'px,'+y.toFixed(1)+'px) translate(-50%,-100%)';
+  });
+}
+
+/* ---------- Panel ---------- */
+var panel=document.getElementById('panel');
+function niceStep(max){
+  var raw=max/4, mag=Math.pow(10,Math.floor(Math.log10(raw))), c=[1,2,5,10];
+  for(var i=0;i<c.length;i++){ if(c[i]*mag>=raw) return c[i]*mag }
+  return 10*mag;
+}
+function chartSVG(b){
+  var W=320,H=165,L=34,R=6,T=10,Bm=22, pw=W-L-R, ph=H-T-Bm;
+  var mx=Math.max.apply(null,b.mRev.concat(b.mExp));
+  var step=niceStep(mx), top=step*Math.ceil(mx/step);
+  var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Monthly revenue and expenses for '+b.name+', May to October">';
+  for(var k=0;k*step<=top+1e-9;k++){
+    var v=k*step, y=T+ph-(v/top)*ph;
+    s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="var(--line)" stroke-width="1"/>';
+    s+='<text x="'+(L-5)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end" font-size="10" fill="var(--muted)" font-family="var(--font-mono)">'+(step<1?v.toFixed(1):v.toFixed(0))+'</text>';
+  }
+  var gw=pw/MONTHS.length, bw=gw*0.3;
+  MONTHS.forEach(function(m,i){
+    var gx=L+i*gw+gw/2, hr=b.mRev[i]/top*ph, he=b.mExp[i]/top*ph;
+    s+='<rect x="'+(gx-bw-1).toFixed(1)+'" y="'+(T+ph-hr).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+hr.toFixed(1)+'" rx="2" fill="var(--accent)"><title>'+m+' revenue $'+b.mRev[i].toFixed(2)+'M</title></rect>';
+    s+='<rect x="'+(gx+1).toFixed(1)+'" y="'+(T+ph-he).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+he.toFixed(1)+'" rx="2" fill="var(--warn)"><title>'+m+' expenses $'+b.mExp[i].toFixed(2)+'M</title></rect>';
+    s+='<text x="'+gx.toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="var(--font-body)">'+m+'</text>';
+  });
+  return s+'</svg>';
+}
+function renderPanel(b){
+  var pc=b.profit>=0?'good':'bad';
+  panel.innerHTML=
+   '<div class="p-head"><span class="tag"><i style="background:'+b.color+'"></i>'+b.sector+'</span><button class="x" type="button" id="pClose" aria-label="Close panel">&times;</button></div>'+
+   '<h2>'+b.name+'</h2><p class="desc">'+b.desc+'</p>'+
+   '<div class="kpis">'+
+     '<div class="kpi"><span>Revenue / year</span><b>'+money(b.rev)+'</b></div>'+
+     '<div class="kpi"><span>Expenses / year</span><b>'+money(b.exp)+'</b></div>'+
+     '<div class="kpi"><span>Net profit</span><b class="'+pc+'">'+money(b.profit)+'</b></div>'+
+     '<div class="kpi"><span>Profit margin</span><b class="'+pc+'">'+b.margin.toFixed(1)+'%</b></div>'+
+   '</div>'+
+   '<div class="chartbox"><div class="chart-h"><span>Monthly, $ millions</span><span class="legend"><span><i style="background:var(--accent)"></i>Revenue</span><span><i style="background:var(--warn)"></i>Expenses</span></span></div>'+chartSVG(b)+'</div>'+
+   '<dl class="facts"><dt>Business model</dt><dd>'+b.role+'</dd><dt>Employees</dt><dd>'+b.staff.toLocaleString('en-US')+'</dd><dt>'+b.extra[0]+'</dt><dd>'+b.extra[1]+'</dd><dt>Revenue per employee</dt><dd>$'+Math.round(b.rev*1e6/b.staff/1000)+'k</dd></dl>'+
+   '<div class="note"><b>Analyst note</b><p>'+b.note+'</p></div>'+
+   '<p class="fine">Sample figures created for a university project.</p>';
+  panel.hidden=false; panel.scrollTop=0;
+}
+
+/* ---------- Selection, hover, camera tween ---------- */
+var selected=null, hovered=null, tween=null;
+function glow(id,v){
+  var g=groups[id]; if(!g) return;
+  var col=new THREE.Color(byId[id].color);
+  g.traverse(function(o){
+    if(!o.isMesh) return;
+    [].concat(o.material).forEach(function(m){ if(m.emissive){m.emissive.copy(col);m.emissiveIntensity=v} });
+  });
+}
+function refreshGlow(){
+  DATA.forEach(function(b){
+    glow(b.id,b.id===selected?0.4:(b.id===hovered?0.22:0));
+    outlines[b.id].visible=(b.id===selected||b.id===hovered);
+    pins[b.id].classList.toggle('on',b.id===selected);
+    chips[b.id].setAttribute('aria-pressed',b.id===selected?'true':'false');
+  });
+}
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function flyTo(pos,tgt){
+  if(reduce){camera.position.copy(pos);controls.target.copy(tgt);controls.update();return}
+  tween={t0:performance.now(),dur:900,fp:camera.position.clone(),tp:pos.clone(),ft:controls.target.clone(),tt:tgt.clone()};
+}
+function isNarrow(){return window.matchMedia('(max-width: 720px)').matches}
+function select(id){
+  var b=byId[id]; selected=id; refreshGlow(); renderPanel(b);
+  var tgt=new THREE.Vector3(b.pos[0],b.h*0.45,b.pos[1]);
+  var dir=camera.position.clone().sub(controls.target); dir.y=Math.max(dir.y,dir.length()*0.35); dir.normalize();
+  var dist=Math.min(Math.max(b.h*1.6,36),100)*(isNarrow()?1.2:1);
+  if(isNarrow()) tgt.y-=dist*0.16;
+  flyTo(tgt.clone().add(dir.multiplyScalar(dist)),tgt);
+  if(chips[id].scrollIntoView) chips[id].scrollIntoView({block:'nearest',inline:'center'});
+  hideHint();
+}
+function deselect(){selected=null;panel.hidden=true;refreshGlow()}
+function resetView(){deselect();flyTo(HOME_POS.clone(),HOME_TGT.clone())}
+panel.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('#pClose')) deselect() });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') deselect() });
+document.getElementById('btnReset').addEventListener('click',resetView);
+var spin=document.getElementById('btnSpin');
+spin.addEventListener('click',function(){
+  controls.autoRotate=!controls.autoRotate; spin.setAttribute('aria-pressed',controls.autoRotate?'true':'false');
+});
+var hint=document.getElementById('hint');
+function hideHint(){hint.classList.add('gone')}
+
+/* picking */
+var ray=new THREE.Raycaster(), ndc=new THREE.Vector2();
+function pick(ev){
+  var r=renderer.domElement.getBoundingClientRect();
+  ndc.set(((ev.clientX-r.left)/r.width)*2-1,-((ev.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  var hit=ray.intersectObjects(pickables,false);
+  return hit.length?hit[0].object.userData.id:null;
+}
+var down=null, dom=renderer.domElement;
+dom.addEventListener('pointerdown',function(e){down={x:e.clientX,y:e.clientY,t:performance.now()};tween=null;hideHint()});
+dom.addEventListener('pointerup',function(e){
+  if(!down) return;
+  var moved=Math.hypot(e.clientX-down.x,e.clientY-down.y), dt=performance.now()-down.t; down=null;
+  if(moved<6&&dt<600){ var id=pick(e); if(id) select(id); else if(selected) deselect(); }
+});
+var hoverQueued=false;
+dom.addEventListener('pointermove',function(e){
+  if(e.pointerType==='touch'||down||hoverQueued) return;
+  hoverQueued=true;
+  requestAnimationFrame(function(){
+    hoverQueued=false; var id=pick(e);
+    if(id!==hovered){hovered=id;dom.style.cursor=id?'pointer':'grab';refreshGlow()}
+  });
+});
+dom.addEventListener('wheel',hideHint,{passive:true});
+
+/* resize */
+function resize(){
+  var w=stage.clientWidth,h=stage.clientHeight; if(!w||!h) return;
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+}
+if(window.ResizeObserver) new ResizeObserver(resize).observe(stage); else window.addEventListener('resize',resize);
+resize();
+
+/* loop */
+var last=performance.now();
+function ease(k){return k<0.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2}
+function frame(now){
+  var dt=Math.min((now-last)/1000,0.05); last=now;
+  if(tween){
+    var k=Math.min((now-tween.t0)/tween.dur,1), e=ease(k);
+    camera.position.lerpVectors(tween.fp,tween.tp,e);
+    controls.target.lerpVectors(tween.ft,tween.tt,e);
+    if(k>=1) tween=null;
+  }
+  if(!reduce){
+    rotors.forEach(function(r){r.rotation.z+=dt*1.6});
+    cars.forEach(function(c){
+      var p=c.m.position;
+      if(c.axis==='x'){p.x+=c.dir*c.speed*dt; if(p.x>62)p.x=-62; if(p.x<-62)p.x=62}
+      else {p.z+=c.dir*c.speed*dt; if(p.z>62)p.z=-62; if(p.z<-62)p.z=62}
+    });
+  }
+  controls.update();
+  renderer.render(scene,camera);
+  updateLabels();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
